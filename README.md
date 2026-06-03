@@ -16,8 +16,7 @@ file handling.
 
 ## Development
 
-Install test dependencies, then run:
+Install project dependencies:
 
 ```powershell
-python -m pytest
-```
+uv sync
