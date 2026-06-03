@@ -60,3 +60,52 @@ def test_config_provider_raw_parser_supports_has_option():
 
     assert provider.parser.has_option("MiXeDProgram", "Name") is True
     assert provider.has_option("MiXeDProgram", "Name") is True
+
+
+def test_require_returns_value_from_program_section():
+    provider = LegacyIniConfigProvider("tests/fixtures/legacy_sample.ini", "mixedprogram")
+
+    assert provider.require("Name") == "mixed case section"
+
+
+def test_require_returns_value_from_explicit_section():
+    provider = LegacyIniConfigProvider("tests/fixtures/legacy_sample.ini", "mixedprogram")
+
+    assert provider.require("Name", section="Defaults") == "fixture"
+
+
+def test_require_raises_fatal_error_for_missing_option():
+    provider = LegacyIniConfigProvider("tests/fixtures/legacy_sample.ini", "mixedprogram")
+
+    with pytest.raises(FatalError):
+        provider.require("MissingOption")
+
+
+def test_require_raises_fatal_error_for_missing_section():
+    provider = LegacyIniConfigProvider("tests/fixtures/legacy_sample.ini", "mixedprogram")
+
+    with pytest.raises(FatalError):
+        provider.require("Name", section="MissingSection")
+
+
+def test_requireint_returns_integer():
+    provider = LegacyIniConfigProvider("tests/fixtures/legacy_sample.ini", "mixedprogram")
+
+    assert provider.requireint("Retries") == 7
+
+
+def test_requireboolean_returns_boolean():
+    provider = LegacyIniConfigProvider("tests/fixtures/legacy_sample.ini", "mixedprogram")
+
+    assert provider.requireboolean("Enabled") is False
+
+
+def test_require_error_message_includes_option_and_section():
+    provider = LegacyIniConfigProvider("tests/fixtures/legacy_sample.ini", "mixedprogram")
+
+    with pytest.raises(FatalError) as exc_info:
+        provider.require("MissingOption", section="MiXeDProgram")
+
+    message = str(exc_info.value)
+    assert "MissingOption" in message
+    assert "MiXeDProgram" in message

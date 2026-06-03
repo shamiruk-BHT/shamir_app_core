@@ -44,6 +44,21 @@ class LegacyIniConfigProvider:
         """Delegate to ConfigParser.getboolean() with legacy parser behavior preserved."""
         return self.parser.getboolean(section, option, *args, **kwargs)
 
+    def require(self, option, *, section=None):
+        """Return a required string option, raising FatalError when it is missing."""
+        required_section = self._require_section_and_option(option, section)
+        return self.get(required_section, option)
+
+    def requireint(self, option, *, section=None):
+        """Return a required integer option, raising FatalError when it is missing."""
+        required_section = self._require_section_and_option(option, section)
+        return self.getint(required_section, option)
+
+    def requireboolean(self, option, *, section=None):
+        """Return a required boolean option, raising FatalError when it is missing."""
+        required_section = self._require_section_and_option(option, section)
+        return self.getboolean(required_section, option)
+
     def has_option(self, section, option):
         """Delegate to ConfigParser.has_option() with legacy parser behavior preserved."""
         return self.parser.has_option(section, option)
@@ -51,3 +66,13 @@ class LegacyIniConfigProvider:
     def sections(self):
         """Delegate to ConfigParser.sections() with legacy parser behavior preserved."""
         return self.parser.sections()
+
+    def _require_section_and_option(self, option, section=None):
+        required_section = self.program_section if section is None else section
+        if not self.parser.has_section(required_section):
+            raise FatalError(f"Required config section {required_section} does not exist")
+        if not self.parser.has_option(required_section, option):
+            raise FatalError(
+                f"Required config option {option} in section {required_section} does not exist"
+            )
+        return required_section
