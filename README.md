@@ -17,6 +17,7 @@ Use this package when a migrated script needs a narrow compatibility helper for:
 - required config value access
 - runtime identity lookup from environment data
 - explicit runtime path storage
+- small explicit application logger setup
 - minimal composition of config and identity helpers
 - legacy credential codec and `mmm.py` compatibility helpers
 
@@ -29,7 +30,8 @@ The package intentionally keeps startup behavior visible to the caller:
 - no import-time work
 - no global `Application` singleton
 - no hidden global state
-- no database, logging, email, or filesystem service setup
+- no database, email, or broad filesystem service setup
+- no hidden logging auto-discovery or global logging configuration
 
 If a script needs a config file, the caller provides the path. If a script needs
 service setup, keep that setup outside this package until a focused helper is
@@ -43,17 +45,28 @@ defined and tested.
   - `getint()`
   - `getboolean()`
   - `has_option()`
-  - `require()`
-  - `requireint()`
-  - `requireboolean()`
+  - `require("Option")` reads from the current program section
+  - `require("host", section="mysql")` reads from an explicit named section
+  - `requireint()` and `requireboolean()` support the same `section=` pattern
 - `RuntimeIdentity`
+  - `program_name`
+  - `username`
+  - `machine_name`
   - `getusername()`
   - `gethostname()`
 - `LegacyRuntimePaths`
   - explicit `config_path`
+  - `config_file` alias
   - optional `base_dir`
+  - optional `logs_dir`
+- `create_logger(name, log_dir, level=logging.INFO)`
+  - writes `<log_dir>/<name>.log`
+  - daily midnight rollover with `.YYYY-MM-DD` suffix
 - `LegacyApplicationContext`
   - `LegacyApplicationContext(ini_path, progname, environ=None)`
+  - runtime identity access through `context.runtime.program_name`,
+    `context.runtime.username`, `context.runtime.machine_name`
+  - `context.paths.logs_dir`
   - `context.config` aliases `context.config_provider`
   - raw parser remains available through `context.config_provider.parser`
 - `shamir_app_core.compat.mmm`
@@ -70,13 +83,13 @@ uv sync
 Run the full test suite:
 
 ```powershell
-uv run python -m pytest
+uv run pytest
 ```
 
 ## Preferred Imports
 
 ```python
-from shamir_app_core import FatalError, LegacyApplicationContext
+from shamir_app_core import FatalError, LegacyApplicationContext, create_logger
 from shamir_app_core.config import LegacyIniConfigProvider
 from shamir_app_core.runtime import LegacyRuntimePaths, RuntimeIdentity
 from shamir_app_core.compat import mmm
@@ -88,7 +101,7 @@ from shamir_app_core.credentials.codec import LegacyCredentialsCodec
 ```python
 from shamir_app_core.context import LegacyApplicationContext
 from shamir_app_core.runtime import LegacyRuntimePaths
-
+from shamir_app_core import create_logger
 
 paths = LegacyRuntimePaths(
     config_path="C:/path/to/shamiruk.ini",
@@ -107,7 +120,13 @@ name = context.config.require("Name")
 retries = context.config.requireint("Retries")
 enabled = context.config.requireboolean("Enabled")
 
-print(context.username, context.computername, name, retries, enabled)
+log = create_logger(
+    name=context.runtime.program_name,
+    log_dir=context.paths.logs_dir,
+)
+log.info("Program started")
+
+print(context.runtime.username, context.runtime.machine_name, name, retries, enabled)
 ```
 
 In production code, pass the actual configuration path and normally omit

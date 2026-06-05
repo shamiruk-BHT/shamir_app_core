@@ -12,13 +12,29 @@ def test_context_loads_explicit_fixture_and_environment():
         environ={"USERNAME": "alice", "COMPUTERNAME": "workstation"},
     )
 
-    assert context.progname == "MiXeDProgram"
-    assert context.username == "alice"
-    assert context.computername == "workstation"
+    assert context.runtime.program_name == "MiXeDProgram"
+    assert context.runtime.username == "alice"
+    assert context.runtime.machine_name == "workstation"
+    assert context.paths.config_file.as_posix() == "tests/fixtures/legacy_sample.ini"
+    assert context.paths.logs_dir.as_posix() == "tests/fixtures/logs"
     assert isinstance(context.config_provider, LegacyIniConfigProvider)
     assert context.config is context.config_provider
     assert context.config.get("MiXeDProgram", "Name") == "mixed case section"
     assert context.program_section == "MiXeDProgram"
+
+
+def test_context_does_not_expose_direct_runtime_identity_aliases():
+    context = LegacyApplicationContext(
+        ini_path="tests/fixtures/legacy_sample.ini",
+        progname="MiXeDProgram",
+        environ={"USERNAME": "alice", "COMPUTERNAME": "workstation"},
+    )
+
+    assert not hasattr(context, "program_name")
+    assert not hasattr(context, "progname")
+    assert not hasattr(context, "username")
+    assert not hasattr(context, "machine_name")
+    assert not hasattr(context, "computername")
 
 
 def test_context_missing_username_raises_key_error():

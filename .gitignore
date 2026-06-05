@@ -6,6 +6,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .uv-cache/
+examples/logs/
 build/
 dist/
 *.egg-info/

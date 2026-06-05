@@ -74,6 +74,18 @@ def test_require_returns_value_from_explicit_section():
     assert provider.require("Name", section="Defaults") == "fixture"
 
 
+def test_requireint_returns_value_from_explicit_section():
+    provider = LegacyIniConfigProvider("tests/fixtures/legacy_sample.ini", "mixedprogram")
+
+    assert provider.requireint("Retries", section="Defaults") == 3
+
+
+def test_requireboolean_returns_value_from_explicit_section():
+    provider = LegacyIniConfigProvider("tests/fixtures/legacy_sample.ini", "mixedprogram")
+
+    assert provider.requireboolean("Enabled", section="Defaults") is True
+
+
 def test_require_raises_fatal_error_for_missing_option():
     provider = LegacyIniConfigProvider("tests/fixtures/legacy_sample.ini", "mixedprogram")
 

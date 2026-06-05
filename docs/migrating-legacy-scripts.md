@@ -16,14 +16,14 @@ keep startup logic visible in the script that owns it.
 - Do not perform work at import time.
 - Do not create a global `Application` singleton.
 - Prefer small composable objects over hidden global runtime state.
-- Keep filesystem, database, email, and logging setup outside this package until
-  a narrow migration need is defined.
+- Keep filesystem, database, and email setup outside this package until a narrow
+  migration need is defined.
 
 ## What This Package Does Not Do
 
 `shamir_app_core` does not search for `shamiruk.ini`, read production
-configuration by default, set up database connections, configure logging, send
-email, or infer paths from the current working directory.
+configuration by default, set up database connections, send email, or infer
+paths from the current working directory.
 
 If a script needs a config file, the caller must provide the path. If a script
 needs environment values, the caller either uses the real process environment or
@@ -53,7 +53,7 @@ name = context.config.require("Name")
 retries = context.config.requireint("Retries")
 enabled = context.config.requireboolean("Enabled")
 
-print(context.username, context.computername, name, retries, enabled)
+print(context.runtime.username, context.runtime.machine_name, name, retries, enabled)
 ```
 
 In production code, pass the actual configuration path and normally omit
@@ -84,11 +84,22 @@ When `section=` is omitted from a `require*` call, the provider reads from
 `program_section`. Pass `section="Defaults"` or another explicit section when a
 script needs shared settings.
 
+```python
+name = config.require("Name")
+host = config.require("host", section="mysql")
+port = config.requireint("port", section="mysql")
+enabled = config.requireboolean("enabled", section="some_section")
+```
+
 ### `RuntimeIdentity`
 
 `RuntimeIdentity(environ=None)` reads legacy identity values from an environment
 mapping. It provides:
 
+- `program_name`, derived from the executing program path unless explicitly
+  provided
+- `username` for `USERNAME`
+- `machine_name` for `COMPUTERNAME`
 - `getusername()` for `USERNAME`
 - `gethostname()` for `COMPUTERNAME`
 
@@ -109,9 +120,8 @@ anything from the current process.
 `LegacyApplicationContext(ini_path, progname, environ=None)` composes the
 current config and identity helpers. It exposes:
 
-- `progname`
-- `username`
-- `computername`
+- `runtime`, the preferred place for `program_name`, `username`, and
+  `machine_name`
 - `config_provider`
 - `config`, an alias to `config_provider`
 - `program_section`
@@ -135,6 +145,5 @@ wrapper script should decide which config file to use before constructing these
 objects.
 
 Avoid recreating the legacy `Application` singleton. If a future migration needs
-database, email, logging, or filesystem helpers, add them as separate explicit
-components with focused tests rather than hiding them behind import-time startup
-logic.
+database, email, or filesystem helpers, add them as separate explicit components
+with focused tests rather than hiding them behind import-time startup logic.

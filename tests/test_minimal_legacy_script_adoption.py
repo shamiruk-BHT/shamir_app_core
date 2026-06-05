@@ -14,8 +14,8 @@ def test_minimal_migrated_legacy_script_uses_explicit_runtime_context():
     retries = context.config.requireint("Retries")
     enabled = context.config.requireboolean("Enabled")
 
-    assert context.username == "alice"
-    assert context.computername == "workstation"
+    assert context.runtime.username == "alice"
+    assert context.runtime.machine_name == "workstation"
     assert context.program_section == "MiXeDProgram"
     assert context.config is context.config_provider
     assert name == "mixed case section"

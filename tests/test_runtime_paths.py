@@ -7,6 +7,7 @@ def test_runtime_paths_stores_config_path_as_path():
     paths = LegacyRuntimePaths(config_path="config/shamiruk.ini")
 
     assert paths.config_path == Path("config/shamiruk.ini")
+    assert paths.config_file == Path("config/shamiruk.ini")
 
 
 def test_runtime_paths_defaults_base_dir_to_config_parent():
@@ -22,6 +23,28 @@ def test_runtime_paths_uses_explicit_base_dir_when_provided():
     )
 
     assert paths.base_dir == Path("runtime")
+
+
+def test_runtime_paths_defaults_logs_dir_to_base_dir_logs():
+    paths = LegacyRuntimePaths(config_path="config/shamiruk.ini")
+
+    assert paths.logs_dir == Path("config") / "logs"
+
+
+def test_runtime_paths_uses_explicit_logs_dir_when_provided():
+    paths = LegacyRuntimePaths(
+        config_path="config/shamiruk.ini",
+        logs_dir="runtime-logs",
+    )
+
+    assert paths.logs_dir == Path("runtime-logs")
+
+
+def test_runtime_paths_accepts_config_file_alias():
+    paths = LegacyRuntimePaths(config_file="config/shamiruk.ini")
+
+    assert paths.config_file == Path("config/shamiruk.ini")
+    assert paths.config_path == Path("config/shamiruk.ini")
 
 
 def test_runtime_paths_accepts_path_objects():
