@@ -16,14 +16,17 @@ keep startup logic visible in the script that owns it.
 - Do not perform work at import time.
 - Do not create a global `Application` singleton.
 - Prefer small composable objects over hidden global runtime state.
-- Keep filesystem, database, and email setup outside this package until a narrow
-  migration need is defined.
+- Keep filesystem and email setup outside this package until a narrow migration
+  need is defined.
+- Keep database support limited to explicit connection helpers; do not add query
+  layers, repositories, ORM abstractions, or business-specific database logic.
 
 ## What This Package Does Not Do
 
 `shamir_app_core` does not search for `shamiruk.ini`, read production
-configuration by default, set up database connections, send email, or infer
-paths from the current working directory.
+configuration by default, send email, or infer paths from the current working
+directory. Its MySQL helper only opens an explicit connection from caller-provided
+configuration.
 
 If a script needs a config file, the caller must provide the path. If a script
 needs environment values, the caller either uses the real process environment or
@@ -145,5 +148,7 @@ wrapper script should decide which config file to use before constructing these
 objects.
 
 Avoid recreating the legacy `Application` singleton. If a future migration needs
-database, email, or filesystem helpers, add them as separate explicit components
-with focused tests rather than hiding them behind import-time startup logic.
+email or filesystem helpers, add them as separate explicit components with
+focused tests rather than hiding them behind import-time startup logic. Keep
+database work outside the minimal connection helper unless a focused shared need
+is defined and tested.

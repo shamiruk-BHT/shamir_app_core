@@ -18,6 +18,7 @@ Use this package when a migrated script needs a narrow compatibility helper for:
 - runtime identity lookup from environment data
 - explicit runtime path storage
 - small explicit application logger setup
+- minimal MySQL connection setup
 - minimal composition of config and identity helpers
 - legacy credential codec and `mmm.py` compatibility helpers
 
@@ -30,7 +31,9 @@ The package intentionally keeps startup behavior visible to the caller:
 - no import-time work
 - no global `Application` singleton
 - no hidden global state
-- no database, email, or broad filesystem service setup
+- no email or broad filesystem service setup
+- no broad database service setup, query layer, repositories, ORM abstraction,
+  or business-specific database logic
 - no hidden logging auto-discovery or global logging configuration
 
 If a script needs a config file, the caller provides the path. If a script needs
@@ -62,6 +65,10 @@ defined and tested.
 - `create_logger(name, log_dir, level=logging.INFO)`
   - writes `<log_dir>/<name>.log`
   - daily midnight rollover with `.YYYY-MM-DD` suffix
+- `create_mysql_connection(config, section="mysql", decode_credentials=True)`
+  - reads MySQL connection settings from a named config section
+  - decodes legacy encoded `user` and `password` values by default
+  - returns the object from `mysql.connector.connect(...)`
 - `LegacyApplicationContext`
   - `LegacyApplicationContext(ini_path, progname, environ=None)`
   - runtime identity access through `context.runtime.program_name`,
@@ -89,7 +96,12 @@ uv run pytest
 ## Preferred Imports
 
 ```python
-from shamir_app_core import FatalError, LegacyApplicationContext, create_logger
+from shamir_app_core import (
+    FatalError,
+    LegacyApplicationContext,
+    create_logger,
+    create_mysql_connection,
+)
 from shamir_app_core.config import LegacyIniConfigProvider
 from shamir_app_core.runtime import LegacyRuntimePaths, RuntimeIdentity
 from shamir_app_core.compat import mmm
@@ -101,7 +113,7 @@ from shamir_app_core.credentials.codec import LegacyCredentialsCodec
 ```python
 from shamir_app_core.context import LegacyApplicationContext
 from shamir_app_core.runtime import LegacyRuntimePaths
-from shamir_app_core import create_logger
+from shamir_app_core import create_logger, create_mysql_connection
 
 paths = LegacyRuntimePaths(
     config_path="C:/path/to/shamiruk.ini",
@@ -125,6 +137,9 @@ log = create_logger(
     log_dir=context.paths.logs_dir,
 )
 log.info("Program started")
+
+connection = create_mysql_connection(context.config)
+connection.close()
 
 print(context.runtime.username, context.runtime.machine_name, name, retries, enabled)
 ```
