@@ -139,6 +139,12 @@ Start each migration by identifying the script inputs: config path, program
 name, and environment expectations. Pass those values explicitly near the script
 entry point.
 
+Use [examples/legacy_program_skeleton.py](../examples/legacy_program_skeleton.py)
+as the reference startup pattern for future migrated programs. Manual runs use
+console mode by default, while Task Scheduler entries should pass
+`--no-console` so banners and prompts are skipped while file logging remains
+enabled.
+
 Prefer `require*` methods for configuration values that must exist before the
 script can safely continue. Use parser-compatible `get*` methods only where the
 legacy behavior intentionally allows parser defaults or optional handling.
@@ -146,6 +152,10 @@ legacy behavior intentionally allows parser defaults or optional handling.
 Keep path selection outside `shamir_app_core`. A caller, test, scheduler, or
 wrapper script should decide which config file to use before constructing these
 objects.
+
+Keep program-specific logic outside startup/runtime setup. Put business work in
+the skeleton's `run_program_logic()` function or in imported processing modules,
+not in argument parsing, context creation, logging setup, or prompt handling.
 
 Avoid recreating the legacy `Application` singleton. If a future migration needs
 email or filesystem helpers, add them as separate explicit components with
