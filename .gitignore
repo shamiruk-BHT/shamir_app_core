@@ -14,3 +14,5 @@ dist/
 .env.*
 !.env.example
 .idea/
+.pytest-tmp/
+.pytest_cache/
