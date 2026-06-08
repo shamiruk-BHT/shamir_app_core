@@ -11,6 +11,21 @@ def _close_logger(logger):
         handler.close()
 
 
+def _file_handlers(logger):
+    return [
+        handler for handler in logger.handlers if isinstance(handler, logging.FileHandler)
+    ]
+
+
+def _console_handlers(logger):
+    return [
+        handler
+        for handler in logger.handlers
+        if isinstance(handler, logging.StreamHandler)
+        and not isinstance(handler, logging.FileHandler)
+    ]
+
+
 def test_create_logger_creates_log_dir(tmp_path):
     log_dir = tmp_path / "missing-logs"
     logger = create_logger("creates_dir", log_dir)
@@ -76,6 +91,59 @@ def test_fatal_displays_as_fatal(tmp_path):
         assert " | FATAL   | Program failed\n" in (
             tmp_path / "fatal_level.log"
         ).read_text(encoding="utf-8")
+    finally:
+        _close_logger(logger)
+
+
+def test_create_logger_console_false_does_not_add_console_handler(tmp_path):
+    logger = create_logger("file_only", tmp_path, console=False)
+
+    try:
+        logger.info("File only")
+        _file_handlers(logger)[0].flush()
+
+        assert len(_file_handlers(logger)) == 1
+        assert _console_handlers(logger) == []
+        assert "File only" in (tmp_path / "file_only.log").read_text(
+            encoding="utf-8"
+        )
+    finally:
+        _close_logger(logger)
+
+
+def test_create_logger_console_true_adds_console_handler(tmp_path):
+    logger = create_logger("with_console", tmp_path, console=True)
+
+    try:
+        assert len(_file_handlers(logger)) == 1
+        assert len(_console_handlers(logger)) == 1
+    finally:
+        _close_logger(logger)
+
+
+def test_create_logger_console_true_still_logs_to_file(tmp_path):
+    logger = create_logger("console_and_file", tmp_path, console=True)
+
+    try:
+        logger.info("Visible and stored")
+        for handler in logger.handlers:
+            handler.flush()
+
+        assert "Visible and stored" in (
+            tmp_path / "console_and_file.log"
+        ).read_text(encoding="utf-8")
+    finally:
+        _close_logger(logger)
+
+
+def test_create_logger_twice_does_not_duplicate_console_handlers(tmp_path):
+    logger = create_logger("one_console", tmp_path, console=True)
+    same_logger = create_logger("one_console", tmp_path, console=True)
+
+    try:
+        assert same_logger is logger
+        assert len(_file_handlers(logger)) == 1
+        assert len(_console_handlers(logger)) == 1
     finally:
         _close_logger(logger)
 

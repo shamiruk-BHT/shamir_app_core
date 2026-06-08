@@ -18,6 +18,7 @@ Use this package when a migrated script needs a narrow compatibility helper for:
 - runtime identity lookup from environment data
 - explicit runtime path storage
 - small explicit application logger setup
+- small console-mode banner and proceed helpers
 - minimal MySQL connection setup
 - minimal composition of config and identity helpers
 - legacy credential codec and `mmm.py` compatibility helpers
@@ -62,9 +63,15 @@ defined and tested.
   - `config_file` alias
   - optional `base_dir`
   - optional `logs_dir`
-- `create_logger(name, log_dir, level=logging.INFO)`
+- `create_logger(name, log_dir, level=logging.INFO, console=False)`
   - writes `<log_dir>/<name>.log`
   - daily midnight rollover with `.YYYY-MM-DD` suffix
+  - optionally also writes to the console when `console=True`
+- console helpers
+  - `format_banner(title, description=None, width=80)`
+  - `print_banner(title, description=None, width=80)`
+  - `can_prompt_user()`
+  - `confirm_proceed(prompt="Proceed?", default=False)`
 - `create_mysql_connection(config, section="mysql", decode_credentials=True)`
   - reads MySQL connection settings from a named config section
   - decodes legacy encoded `user` and `password` values by default
@@ -97,8 +104,12 @@ uv run pytest
 
 ```python
 from shamir_app_core import (
+    can_prompt_user,
+    confirm_proceed,
     FatalError,
+    format_banner,
     LegacyApplicationContext,
+    print_banner,
     create_logger,
     create_mysql_connection,
 )
@@ -135,6 +146,7 @@ enabled = context.config.requireboolean("Enabled")
 log = create_logger(
     name=context.runtime.program_name,
     log_dir=context.paths.logs_dir,
+    console=True,
 )
 log.info("Program started")
 
@@ -147,6 +159,11 @@ print(context.runtime.username, context.runtime.machine_name, name, retries, ena
 In production code, pass the actual configuration path and normally omit
 `environ` so `RuntimeIdentity` reads `os.environ`. In tests, pass a small
 environment mapping to make runtime identity deterministic.
+
+Future program skeletons can enable console logging, banners, and proceed
+prompts for manual runs. Scheduled runs should use a future `--no-console`
+option so programs pass `console=False`, skip banners, and avoid input prompts
+while file logging remains enabled.
 
 ## Migration Notes
 
