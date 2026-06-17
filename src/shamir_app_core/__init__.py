@@ -11,10 +11,12 @@ from shamir_app_core.context import LegacyApplicationContext
 from shamir_app_core.db import create_mysql_connection
 from shamir_app_core.email import (
     ConsoleEmailSender,
+    EmailConfigError,
     EmailMessage,
     EmailSendError,
     GraphEmailSender,
     GraphEmailSettings,
+    load_graph_email_settings,
     UrlLibHttpResponse,
     UrlLibHttpTransport,
 )
@@ -28,6 +30,7 @@ __all__ = [
     "ConsoleEmailSender",
     "create_logger",
     "create_mysql_connection",
+    "EmailConfigError",
     "EmailMessage",
     "EmailSendError",
     "FatalError",
@@ -36,6 +39,7 @@ __all__ = [
     "GraphEmailSettings",
     "JsonlEventWriter",
     "LegacyApplicationContext",
+    "load_graph_email_settings",
     "print_banner",
     "RuntimeError",
     "UrlLibHttpResponse",

@@ -1,3 +1,4 @@
+import configparser
 from dataclasses import dataclass
 from io import BytesIO
 from urllib.error import HTTPError
@@ -5,10 +6,12 @@ from urllib.error import HTTPError
 import pytest
 
 from shamir_app_core import (
+    EmailConfigError,
     EmailMessage,
     EmailSendError,
     GraphEmailSender,
     GraphEmailSettings,
+    load_graph_email_settings,
     UrlLibHttpResponse,
     UrlLibHttpTransport,
 )
@@ -107,6 +110,184 @@ def make_message():
         subject="Status update",
         body_text="The job completed.",
     )
+
+
+def make_config(values, section="email"):
+    config = configparser.ConfigParser()
+    config[section] = values
+    return config
+
+
+def test_load_graph_email_settings_with_direct_client_secret():
+    config = make_config(
+        {
+            "tenant_id": "tenant-id",
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "sender": "sender@example.com",
+        }
+    )
+
+    settings = load_graph_email_settings(config)
+
+    assert settings == GraphEmailSettings(
+        tenant_id="tenant-id",
+        client_id="client-id",
+        client_secret="client-secret",
+        sender="sender@example.com",
+    )
+
+
+def test_load_graph_email_settings_with_client_secret_env():
+    config = make_config(
+        {
+            "tenant_id": "tenant-id",
+            "client_id": "client-id",
+            "client_secret_env": "EMAIL_CLIENT_SECRET",
+            "sender": "sender@example.com",
+        }
+    )
+
+    settings = load_graph_email_settings(
+        config,
+        environ={"EMAIL_CLIENT_SECRET": "secret-from-env"},
+    )
+
+    assert settings.client_secret == "secret-from-env"
+
+
+def test_load_graph_email_settings_missing_required_field_raises_email_config_error():
+    config = make_config(
+        {
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "sender": "sender@example.com",
+        }
+    )
+
+    with pytest.raises(EmailConfigError, match="tenant_id"):
+        load_graph_email_settings(config)
+
+
+def test_load_graph_email_settings_re_raises_email_config_error_unchanged():
+    config = make_config(
+        {
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "sender": "sender@example.com",
+        }
+    )
+
+    with pytest.raises(EmailConfigError) as exc_info:
+        load_graph_email_settings(config)
+
+    assert str(exc_info.value) == "Required config option tenant_id in section email is missing"
+    assert exc_info.value.__cause__ is None
+
+
+def test_load_graph_email_settings_missing_section_raises_email_config_error():
+    config = configparser.ConfigParser()
+
+    with pytest.raises(EmailConfigError, match="Required config section email is missing"):
+        load_graph_email_settings(config)
+
+
+def test_load_graph_email_settings_rejects_both_client_secret_sources():
+    config = make_config(
+        {
+            "tenant_id": "tenant-id",
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "client_secret_env": "EMAIL_CLIENT_SECRET",
+            "sender": "sender@example.com",
+        }
+    )
+
+    with pytest.raises(EmailConfigError, match="mutually exclusive"):
+        load_graph_email_settings(config)
+
+
+def test_load_graph_email_settings_rejects_missing_client_secret_env_value():
+    config = make_config(
+        {
+            "tenant_id": "tenant-id",
+            "client_id": "client-id",
+            "client_secret_env": "EMAIL_CLIENT_SECRET",
+            "sender": "sender@example.com",
+        }
+    )
+
+    with pytest.raises(EmailConfigError, match="missing or blank"):
+        load_graph_email_settings(config, environ={})
+
+
+def test_load_graph_email_settings_allows_graph_backend():
+    config = make_config(
+        {
+            "backend": "graph",
+            "tenant_id": "tenant-id",
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "sender": "sender@example.com",
+        }
+    )
+
+    settings = load_graph_email_settings(config)
+
+    assert settings.sender == "sender@example.com"
+
+
+def test_load_graph_email_settings_rejects_unsupported_backend():
+    config = make_config(
+        {
+            "backend": "smtp_relay",
+            "tenant_id": "tenant-id",
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "sender": "sender@example.com",
+        }
+    )
+
+    with pytest.raises(EmailConfigError, match="only supports the Graph backend"):
+        load_graph_email_settings(config)
+
+
+def test_load_graph_email_settings_parses_optional_values():
+    config = make_config(
+        {
+            "tenant_id": "tenant-id",
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "sender": "sender@example.com",
+            "timeout_seconds": "45",
+            "save_to_sent_items": "false",
+            "authority_host": "https://login.example.test/",
+            "graph_host": "https://graph.example.test/",
+        }
+    )
+
+    settings = load_graph_email_settings(config)
+
+    assert settings.timeout_seconds == 45.0
+    assert settings.save_to_sent_items is False
+    assert settings.authority_host == "https://login.example.test"
+    assert settings.graph_host == "https://graph.example.test"
+
+
+def test_load_graph_email_settings_parses_decimal_timeout_seconds():
+    config = make_config(
+        {
+            "tenant_id": "tenant-id",
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "sender": "sender@example.com",
+            "timeout_seconds": "12.5",
+        }
+    )
+
+    settings = load_graph_email_settings(config)
+
+    assert settings.timeout_seconds == 12.5
 
 
 def test_graph_email_sender_requests_token_and_sends_mail_payload():

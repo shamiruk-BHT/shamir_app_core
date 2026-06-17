@@ -1,9 +1,10 @@
 """Generic text email messages and sender foundations."""
 
 import json as json_module
+import os
 import urllib.error
 import urllib.request
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TextIO
 from urllib.parse import quote, urlencode
@@ -49,6 +50,10 @@ class ConsoleEmailSender:
 
 class EmailSendError(RuntimeError):
     """Raised when an email sender cannot complete or verify delivery."""
+
+
+class EmailConfigError(ValueError):
+    """Raised when email settings cannot be loaded from configuration."""
 
 
 @dataclass(frozen=True)
@@ -282,6 +287,60 @@ class GraphEmailSender:
         }
 
 
+def load_graph_email_settings(
+    config: Any,
+    section: str = "email",
+    environ: Mapping[str, str] | None = None,
+) -> GraphEmailSettings:
+    """Load Graph email settings from a config-like object."""
+    if not _config_has_section(config, section):
+        raise EmailConfigError(f"Required config section {section} is missing")
+
+    backend = _read_optional_config_string(config, section, "backend")
+    if backend is not None and backend.lower() != "graph":
+        raise EmailConfigError(
+            "load_graph_email_settings only supports the Graph backend; "
+            f"got {backend!r}"
+        )
+
+    secret = _load_graph_client_secret(config, section, environ=environ)
+    try:
+        return GraphEmailSettings(
+            tenant_id=_read_required_config_string(config, section, "tenant_id"),
+            client_id=_read_required_config_string(config, section, "client_id"),
+            client_secret=secret,
+            sender=_read_required_config_string(config, section, "sender"),
+            timeout_seconds=_read_optional_config_float(
+                config,
+                section,
+                "timeout_seconds",
+                GraphEmailSettings.timeout_seconds,
+            ),
+            save_to_sent_items=_read_optional_config_boolean(
+                config,
+                section,
+                "save_to_sent_items",
+                GraphEmailSettings.save_to_sent_items,
+            ),
+            authority_host=_read_config_string_or_default(
+                config,
+                section,
+                "authority_host",
+                GraphEmailSettings.authority_host,
+            ),
+            graph_host=_read_config_string_or_default(
+                config,
+                section,
+                "graph_host",
+                GraphEmailSettings.graph_host,
+            ),
+        )
+    except EmailConfigError:
+        raise
+    except ValueError as exc:
+        raise EmailConfigError(str(exc)) from exc
+
+
 def _require_non_blank(value: str, field_name: str, *, strip: bool = True) -> str:
     """Return a validated non-blank string, optionally stripped."""
     if not isinstance(value, str) or not value.strip():
@@ -302,6 +361,136 @@ def _clean_recipients(recipients: Iterable[str]) -> tuple[str, ...]:
     if not clean_recipients:
         raise ValueError("at least one to recipient is required")
     return clean_recipients
+
+
+def _load_graph_client_secret(
+    config: Any,
+    section: str,
+    *,
+    environ: Mapping[str, str] | None,
+) -> str:
+    has_direct_secret = _config_has_option(config, section, "client_secret")
+    has_env_secret = _config_has_option(config, section, "client_secret_env")
+
+    if has_direct_secret and has_env_secret:
+        raise EmailConfigError(
+            "Config options client_secret and client_secret_env are mutually exclusive"
+        )
+    if not has_direct_secret and not has_env_secret:
+        raise EmailConfigError(
+            "Required config option client_secret or client_secret_env is missing"
+        )
+
+    if has_direct_secret:
+        return _read_required_config_string(config, section, "client_secret")
+
+    env_name = _read_required_config_string(config, section, "client_secret_env")
+    env_values = os.environ if environ is None else environ
+    secret = env_values.get(env_name)
+    if not isinstance(secret, str) or not secret.strip():
+        raise EmailConfigError(
+            f"Environment variable {env_name!r} for client_secret is missing or blank"
+        )
+    return secret
+
+
+def _read_required_config_string(config: Any, section: str, option: str) -> str:
+    if not _config_has_option(config, section, option):
+        raise EmailConfigError(
+            f"Required config option {option} in section {section} is missing"
+        )
+    value = _config_get(config, section, option)
+    if not isinstance(value, str) or not value.strip():
+        raise EmailConfigError(
+            f"Required config option {option} in section {section} is blank"
+        )
+    return value.strip()
+
+
+def _read_optional_config_string(
+    config: Any,
+    section: str,
+    option: str,
+    default: str | None = None,
+) -> str | None:
+    if not _config_has_option(config, section, option):
+        return default
+    value = _config_get(config, section, option)
+    if not isinstance(value, str) or not value.strip():
+        return default
+    return value.strip()
+
+
+def _read_config_string_or_default(
+    config: Any,
+    section: str,
+    option: str,
+    default: str,
+) -> str:
+    value = _read_optional_config_string(config, section, option)
+    if value is None:
+        return default
+    return value
+
+
+def _read_optional_config_float(
+    config: Any,
+    section: str,
+    option: str,
+    default: float,
+) -> float:
+    if not _config_has_option(config, section, option):
+        return default
+    try:
+        return float(_config_get(config, section, option))
+    except ValueError as exc:
+        raise EmailConfigError(
+            f"Config option {option} in section {section} must be a number"
+        ) from exc
+
+
+def _read_optional_config_boolean(
+    config: Any,
+    section: str,
+    option: str,
+    default: bool,
+) -> bool:
+    if not _config_has_option(config, section, option):
+        return default
+    value = _config_get(config, section, option).strip().lower()
+    if value in {"1", "yes", "true", "on"}:
+        return True
+    if value in {"0", "no", "false", "off"}:
+        return False
+    raise EmailConfigError(
+        f"Config option {option} in section {section} must be a boolean"
+    )
+
+
+def _config_has_option(config: Any, section: str, option: str) -> bool:
+    try:
+        return bool(config.has_option(section, option))
+    except AttributeError:
+        return option in config[section]
+
+
+def _config_has_section(config: Any, section: str) -> bool:
+    if hasattr(config, "has_section"):
+        return bool(config.has_section(section))
+    if hasattr(config, "sections"):
+        return section in config.sections()
+    try:
+        config[section]
+    except KeyError:
+        return False
+    return True
+
+
+def _config_get(config: Any, section: str, option: str) -> str:
+    try:
+        return config.get(section, option)
+    except AttributeError:
+        return config[section][option]
 
 
 def _response_status_code(response: Any) -> int:
@@ -336,10 +525,12 @@ def _set_default_header(
 
 __all__ = [
     "ConsoleEmailSender",
+    "EmailConfigError",
     "EmailMessage",
     "EmailSendError",
     "GraphEmailSender",
     "GraphEmailSettings",
+    "load_graph_email_settings",
     "UrlLibHttpResponse",
     "UrlLibHttpTransport",
 ]
