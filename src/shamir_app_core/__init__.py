@@ -9,6 +9,7 @@ from shamir_app_core.console import (
 )
 from shamir_app_core.context import LegacyApplicationContext
 from shamir_app_core.db import create_mysql_connection
+from shamir_app_core.email import ConsoleEmailSender, EmailMessage
 from shamir_app_core.event_log import JsonlEventWriter
 from shamir_app_core.errors import ApplicationInitError, FatalError, RuntimeError
 
@@ -16,8 +17,10 @@ __all__ = [
     "ApplicationInitError",
     "can_prompt_user",
     "confirm_proceed",
+    "ConsoleEmailSender",
     "create_logger",
     "create_mysql_connection",
+    "EmailMessage",
     "FatalError",
     "format_banner",
     "JsonlEventWriter",
