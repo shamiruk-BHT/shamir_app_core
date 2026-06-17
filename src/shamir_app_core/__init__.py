@@ -15,6 +15,8 @@ from shamir_app_core.email import (
     EmailSendError,
     GraphEmailSender,
     GraphEmailSettings,
+    UrlLibHttpResponse,
+    UrlLibHttpTransport,
 )
 from shamir_app_core.event_log import JsonlEventWriter
 from shamir_app_core.errors import ApplicationInitError, FatalError, RuntimeError
@@ -36,4 +38,6 @@ __all__ = [
     "LegacyApplicationContext",
     "print_banner",
     "RuntimeError",
+    "UrlLibHttpResponse",
+    "UrlLibHttpTransport",
 ]

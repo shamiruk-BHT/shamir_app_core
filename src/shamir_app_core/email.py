@@ -1,9 +1,12 @@
 """Generic text email messages and sender foundations."""
 
+import json as json_module
+import urllib.error
+import urllib.request
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TextIO
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 
 @dataclass(frozen=True)
@@ -106,6 +109,92 @@ class _HttpTransport(Protocol):
         timeout_seconds: float,
     ) -> Any:
         """Send an HTTP POST request and return a response-like object."""
+
+
+@dataclass(frozen=True)
+class UrlLibHttpResponse:
+    """Small response wrapper returned by UrlLibHttpTransport."""
+
+    status_code: int
+    body: bytes = field(repr=False)
+
+    @property
+    def text(self) -> str:
+        """Decode the response body as UTF-8 text for inspection."""
+        return self.body.decode("utf-8", errors="replace")
+
+    def json(self) -> Any:
+        """Parse the response body as JSON."""
+        return json_module.loads(self.text)
+
+
+class UrlLibHttpTransport:
+    """HTTP POST transport implemented with urllib.request."""
+
+    def __init__(self, urlopen=None) -> None:
+        """Create a transport, optionally injecting urlopen for tests."""
+        self.urlopen = urlopen or urllib.request.urlopen
+
+    def post(
+        self,
+        url: str,
+        *,
+        data: dict[str, str] | None = None,
+        json: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout_seconds: float,
+    ) -> UrlLibHttpResponse:
+        """Send a form or JSON POST request and return a response wrapper."""
+        body, request_headers = self._prepare_request_body_and_headers(
+            data=data,
+            json=json,
+            headers=headers,
+        )
+        request = urllib.request.Request(
+            url,
+            data=body,
+            headers=request_headers,
+            method="POST",
+        )
+
+        try:
+            response = self.urlopen(request, timeout=timeout_seconds)
+        except urllib.error.HTTPError as exc:
+            return UrlLibHttpResponse(status_code=exc.code, body=exc.read())
+
+        with response:
+            return UrlLibHttpResponse(
+                status_code=response.getcode(),
+                body=response.read(),
+            )
+
+    def _prepare_request_body_and_headers(
+        self,
+        *,
+        data: dict[str, str] | None,
+        json: dict[str, Any] | None,
+        headers: dict[str, str] | None,
+    ) -> tuple[bytes | None, dict[str, str]]:
+        """Encode the request body and apply a default content type."""
+        if data is not None and json is not None:
+            raise ValueError("data and json cannot both be provided")
+
+        request_headers = dict(headers or {})
+        if data is not None:
+            body = urlencode(data).encode("utf-8")
+            _set_default_header(
+                request_headers,
+                "Content-Type",
+                "application/x-www-form-urlencoded",
+            )
+            return body, request_headers
+
+        if json is not None:
+            body = json_module.dumps(json).encode("utf-8")
+            _set_default_header(request_headers, "Content-Type", "application/json")
+            return body, request_headers
+
+        return None, request_headers
 
 
 class GraphEmailSender:
@@ -235,10 +324,22 @@ def _response_json(response: Any) -> dict[str, Any]:
     return body
 
 
+def _set_default_header(
+    headers: dict[str, str],
+    name: str,
+    value: str,
+) -> None:
+    """Set a header only when it is not already present case-insensitively."""
+    if not any(existing.lower() == name.lower() for existing in headers):
+        headers[name] = value
+
+
 __all__ = [
     "ConsoleEmailSender",
     "EmailMessage",
     "EmailSendError",
     "GraphEmailSender",
     "GraphEmailSettings",
+    "UrlLibHttpResponse",
+    "UrlLibHttpTransport",
 ]

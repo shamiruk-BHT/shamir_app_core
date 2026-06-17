@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from io import BytesIO
+from urllib.error import HTTPError
 
 import pytest
 
@@ -7,6 +9,8 @@ from shamir_app_core import (
     EmailSendError,
     GraphEmailSender,
     GraphEmailSettings,
+    UrlLibHttpResponse,
+    UrlLibHttpTransport,
 )
 
 
@@ -47,6 +51,34 @@ class RaisingTransport:
         if self.responses_before_error:
             return self.responses_before_error.pop(0)
         raise TimeoutError("request timed out")
+
+
+class FakeUrlOpenResponse:
+    def __init__(self, status_code, body):
+        self.status_code = status_code
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return None
+
+    def getcode(self):
+        return self.status_code
+
+    def read(self):
+        return self.body
+
+
+class RecordingUrlOpen:
+    def __init__(self, response):
+        self.response = response
+        self.requests = []
+
+    def __call__(self, request, *, timeout):
+        self.requests.append({"request": request, "timeout": timeout})
+        return self.response
 
 
 def make_settings(**overrides):
@@ -193,3 +225,107 @@ def test_graph_email_api_is_available_from_top_level_package():
     assert GraphEmailSettings.__name__ == "GraphEmailSettings"
     assert GraphEmailSender.__name__ == "GraphEmailSender"
     assert EmailSendError.__name__ == "EmailSendError"
+
+
+def test_url_lib_http_transport_encodes_form_post_data():
+    urlopen = RecordingUrlOpen(FakeUrlOpenResponse(200, b'{"ok": true}'))
+    transport = UrlLibHttpTransport(urlopen=urlopen)
+
+    response = transport.post(
+        "https://example.invalid/token",
+        data={"client_id": "client-id", "scope": "https://graph.microsoft.com/.default"},
+        timeout_seconds=7,
+    )
+
+    recorded = urlopen.requests[0]
+    request = recorded["request"]
+    assert request.full_url == "https://example.invalid/token"
+    assert request.get_method() == "POST"
+    assert request.data == (
+        b"client_id=client-id&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default"
+    )
+    assert request.get_header("Content-type") == "application/x-www-form-urlencoded"
+    assert recorded["timeout"] == 7
+    assert response.status_code == 200
+
+
+def test_url_lib_http_transport_encodes_json_post_data():
+    urlopen = RecordingUrlOpen(FakeUrlOpenResponse(202, b""))
+    transport = UrlLibHttpTransport(urlopen=urlopen)
+
+    transport.post(
+        "https://example.invalid/sendMail",
+        json={"message": {"subject": "Status update"}},
+        timeout_seconds=3,
+    )
+
+    request = urlopen.requests[0]["request"]
+    assert request.get_header("Content-type") == "application/json"
+    assert request.data == b'{"message": {"subject": "Status update"}}'
+
+
+def test_url_lib_http_transport_forwards_headers():
+    urlopen = RecordingUrlOpen(FakeUrlOpenResponse(202, b""))
+    transport = UrlLibHttpTransport(urlopen=urlopen)
+
+    transport.post(
+        "https://example.invalid/sendMail",
+        json={"message": {}},
+        headers={"Authorization": "Bearer token-value", "Content-Type": "application/json"},
+        timeout_seconds=3,
+    )
+
+    request = urlopen.requests[0]["request"]
+    assert request.get_header("Authorization") == "Bearer token-value"
+    assert request.get_header("Content-type") == "application/json"
+
+
+def test_url_lib_http_transport_returns_response_for_http_error():
+    body = b'{"error": "invalid_client"}'
+
+    def raise_http_error(request, *, timeout):
+        raise HTTPError(
+            request.full_url,
+            400,
+            "Bad Request",
+            hdrs={},
+            fp=BytesIO(body),
+        )
+
+    transport = UrlLibHttpTransport(urlopen=raise_http_error)
+
+    response = transport.post(
+        "https://example.invalid/token",
+        data={"client_id": "client-id"},
+        timeout_seconds=3,
+    )
+
+    assert response.status_code == 400
+    assert response.body == body
+    assert response.text == '{"error": "invalid_client"}'
+    assert response.json() == {"error": "invalid_client"}
+
+
+def test_url_lib_http_response_repr_does_not_include_body_or_token_value():
+    response = UrlLibHttpResponse(
+        status_code=200,
+        body=b'{"access_token": "secret-token-value"}',
+    )
+
+    response_repr = repr(response)
+
+    assert "body" not in response_repr
+    assert "secret-token-value" not in response_repr
+
+
+def test_url_lib_http_response_json_parses_json_object():
+    response = UrlLibHttpResponse(status_code=200, body=b'{"access_token": "token"}')
+
+    assert response.json() == {"access_token": "token"}
+
+
+def test_url_lib_http_response_json_raises_for_invalid_json():
+    response = UrlLibHttpResponse(status_code=200, body=b"not json")
+
+    with pytest.raises(ValueError):
+        response.json()
