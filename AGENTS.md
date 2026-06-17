@@ -183,6 +183,14 @@ Before editing:
 
 Do not commit or push unless explicitly asked.
 
+## Language Rules
+
+- User-facing chat responses may be written in Polish if the user writes in Polish.
+- Repository content must be written in English.
+- This includes source code, comments, docstrings, tests, test names, commit messages, README files, documentation, examples, configuration comments, and report files intended to live in the repository.
+- Do not add Polish text to committed project files unless explicitly requested.
+- Local-only discussion notes outside the repository may be written in Polish.
+
 ## Testing and verification
 
 Use `uv`.
