@@ -9,7 +9,13 @@ from shamir_app_core.console import (
 )
 from shamir_app_core.context import LegacyApplicationContext
 from shamir_app_core.db import create_mysql_connection
-from shamir_app_core.email import ConsoleEmailSender, EmailMessage
+from shamir_app_core.email import (
+    ConsoleEmailSender,
+    EmailMessage,
+    EmailSendError,
+    GraphEmailSender,
+    GraphEmailSettings,
+)
 from shamir_app_core.event_log import JsonlEventWriter
 from shamir_app_core.errors import ApplicationInitError, FatalError, RuntimeError
 
@@ -21,8 +27,11 @@ __all__ = [
     "create_logger",
     "create_mysql_connection",
     "EmailMessage",
+    "EmailSendError",
     "FatalError",
     "format_banner",
+    "GraphEmailSender",
+    "GraphEmailSettings",
     "JsonlEventWriter",
     "LegacyApplicationContext",
     "print_banner",
