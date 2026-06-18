@@ -39,6 +39,19 @@ def test_email_message_accepts_required_text_fields():
     assert message.to == ("user@example.com",)
     assert message.subject == "Status update"
     assert message.body_text == "The job completed."
+    assert message.body_html is None
+
+
+def test_email_message_accepts_optional_html_body():
+    message = EmailMessage(
+        to=["user@example.com"],
+        subject="Status update",
+        body_text="The job completed.",
+        body_html="<p>The job completed.</p>",
+    )
+
+    assert message.body_text == "The job completed."
+    assert message.body_html == "<p>The job completed.</p>"
 
 
 def test_email_message_strips_subject_and_recipients():
@@ -69,6 +82,17 @@ def test_email_message_rejects_blank_body_text(body_text):
             to=["user@example.com"],
             subject="Subject",
             body_text=body_text,
+        )
+
+
+@pytest.mark.parametrize("body_html", ["", "   "])
+def test_email_message_rejects_blank_body_html_when_provided(body_html):
+    with pytest.raises(ValueError, match="body_html must not be blank"):
+        EmailMessage(
+            to=["user@example.com"],
+            subject="Subject",
+            body_text="Body text",
+            body_html=body_html,
         )
 
 
@@ -124,6 +148,23 @@ def test_console_email_sender_writes_readable_preview():
     )
 
 
+def test_console_email_sender_indicates_html_body_without_dumping_html():
+    stream = StringIO()
+    sender = ConsoleEmailSender(stream)
+    message = EmailMessage(
+        to=["user@example.com"],
+        subject="Status update",
+        body_text="The job completed.",
+        body_html="<p>The job <strong>completed</strong>.</p>",
+    )
+
+    sender.send(message)
+
+    preview = stream.getvalue()
+    assert "[HTML body attached]" in preview
+    assert "<strong>completed</strong>" not in preview
+
+
 def test_email_sender_protocol_accepts_console_email_sender_structurally():
     stream = StringIO()
     sender = ConsoleEmailSender(stream)
@@ -160,8 +201,66 @@ def test_pickup_directory_email_sender_writes_one_parseable_eml_file(tmp_path):
     assert parsed["From"] == "sender@example.com"
     assert parsed["To"] == "recipient@example.com"
     assert parsed["Subject"] == "Status update"
+    assert parsed.get_content_type() == "text/plain"
+    assert not parsed.is_multipart()
     assert parsed.get_body(preferencelist=("plain",)).get_content().splitlines() == [
         "The job completed."
+    ]
+
+
+def test_pickup_directory_email_sender_plain_text_uses_smtp_crlf_output(tmp_path):
+    sender = PickupDirectoryEmailSender(
+        PickupDirectoryEmailSettings(
+            pickup_dir=tmp_path,
+            sender="sender@example.com",
+        )
+    )
+    message = EmailMessage(
+        to=["recipient@example.com"],
+        subject="Status update",
+        body_text="The job completed.",
+    )
+
+    sender.send(message)
+
+    output = next(tmp_path.glob("*.eml")).read_bytes()
+    assert b"\r\n" in output
+    assert b"\n" not in output.replace(b"\r\n", b"")
+
+
+def test_pickup_directory_email_sender_writes_html_as_multipart_alternative(tmp_path):
+    sender = PickupDirectoryEmailSender(
+        PickupDirectoryEmailSettings(
+            pickup_dir=tmp_path,
+            sender="sender@example.com",
+        )
+    )
+    message = EmailMessage(
+        to=["recipient@example.com"],
+        subject="Status update",
+        body_text="The job completed.",
+        body_html="<p>The job <strong>completed</strong>.</p>",
+    )
+
+    sender.send(message)
+
+    output = next(tmp_path.glob("*.eml")).read_bytes()
+    assert b"\r\n" in output
+    assert b"\n" not in output.replace(b"\r\n", b"")
+
+    parsed = BytesParser(policy=policy.default).parsebytes(output)
+    assert parsed.get_content_type() == "multipart/alternative"
+    assert parsed.is_multipart()
+
+    plain_body = parsed.get_body(preferencelist=("plain",))
+    html_body = parsed.get_body(preferencelist=("html",))
+    assert plain_body is not None
+    assert html_body is not None
+    assert plain_body.get_content_type() == "text/plain"
+    assert html_body.get_content_type() == "text/html"
+    assert plain_body.get_content().splitlines() == ["The job completed."]
+    assert html_body.get_content().splitlines() == [
+        "<p>The job <strong>completed</strong>.</p>"
     ]
 
 

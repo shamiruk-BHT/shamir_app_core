@@ -1,4 +1,4 @@
-"""Generic text email messages and sender foundations."""
+"""Generic email messages and sender foundations."""
 
 from datetime import datetime, timezone
 from email.generator import BytesGenerator
@@ -19,21 +19,34 @@ from uuid import uuid4
 
 @dataclass(frozen=True)
 class EmailMessage:
-    """A simple validated plain-text email message."""
+    """A simple validated email message with required plain-text content."""
 
     to: tuple[str, ...]
     subject: str
     body_text: str
+    body_html: str | None
 
-    def __init__(self, to: Iterable[str], subject: str, body_text: str) -> None:
+    def __init__(
+        self,
+        to: Iterable[str],
+        subject: str,
+        body_text: str,
+        body_html: str | None = None,
+    ) -> None:
         """Create a message and validate required text fields and recipients."""
         clean_subject = _require_non_blank(subject, "subject")
         clean_body_text = _require_non_blank(body_text, "body_text", strip=False)
+        clean_body_html = (
+            _require_non_blank(body_html, "body_html", strip=False)
+            if body_html is not None
+            else None
+        )
         clean_to = _clean_recipients(to)
 
         object.__setattr__(self, "to", clean_to)
         object.__setattr__(self, "subject", clean_subject)
         object.__setattr__(self, "body_text", clean_body_text)
+        object.__setattr__(self, "body_html", clean_body_html)
 
 
 class EmailSender(Protocol):
@@ -59,6 +72,8 @@ class ConsoleEmailSender:
         self.stream.write(message.body_text)
         if not message.body_text.endswith("\n"):
             self.stream.write("\n")
+        if message.body_html is not None:
+            self.stream.write("[HTML body attached]\n")
         self.stream.write("--- End email preview ---\n")
 
 
@@ -129,6 +144,8 @@ class PickupDirectoryEmailSender:
         mime_message["To"] = ", ".join(message.to)
         mime_message["Subject"] = message.subject
         mime_message.set_content(message.body_text)
+        if message.body_html is not None:
+            mime_message.add_alternative(message.body_html, subtype="html")
 
         output = BytesIO()
         generator = BytesGenerator(output, policy=policy.SMTP)
@@ -351,12 +368,16 @@ class GraphEmailSender:
 
     def _send_mail_payload(self, message: EmailMessage) -> dict[str, Any]:
         """Convert an EmailMessage into the Graph sendMail JSON payload."""
+        body_content_type = "HTML" if message.body_html is not None else "Text"
+        body_content = (
+            message.body_html if message.body_html is not None else message.body_text
+        )
         return {
             "message": {
                 "subject": message.subject,
                 "body": {
-                    "contentType": "Text",
-                    "content": message.body_text,
+                    "contentType": body_content_type,
+                    "content": body_content,
                 },
                 "toRecipients": [
                     {"emailAddress": {"address": recipient}}

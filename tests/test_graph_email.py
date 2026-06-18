@@ -117,6 +117,15 @@ def make_message():
     )
 
 
+def make_html_message():
+    return EmailMessage(
+        to=["first@example.com", "second@example.com"],
+        subject="Status update",
+        body_text="The job completed.",
+        body_html="<p>The job <strong>completed</strong>.</p>",
+    )
+
+
 def make_config(values, section="email"):
     config = configparser.ConfigParser()
     config[section] = values
@@ -342,6 +351,42 @@ def test_graph_email_sender_requests_token_and_sends_mail_payload():
             ],
         },
         "saveToSentItems": True,
+    }
+
+
+def test_graph_email_sender_plain_text_payload_uses_text_content_type():
+    transport = FakeTransport(
+        [
+            FakeResponse(200, {"access_token": "token-value"}),
+            FakeResponse(202),
+        ]
+    )
+    sender = GraphEmailSender(make_settings(), transport)
+
+    sender.send(make_message())
+
+    body = transport.requests[1]["json"]["message"]["body"]
+    assert body == {
+        "contentType": "Text",
+        "content": "The job completed.",
+    }
+
+
+def test_graph_email_sender_html_payload_uses_html_body_content():
+    transport = FakeTransport(
+        [
+            FakeResponse(200, {"access_token": "token-value"}),
+            FakeResponse(202),
+        ]
+    )
+    sender = GraphEmailSender(make_settings(), transport)
+
+    sender.send(make_html_message())
+
+    body = transport.requests[1]["json"]["message"]["body"]
+    assert body == {
+        "contentType": "HTML",
+        "content": "<p>The job <strong>completed</strong>.</p>",
     }
 
 
