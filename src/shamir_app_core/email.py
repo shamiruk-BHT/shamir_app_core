@@ -421,6 +421,32 @@ def load_graph_email_settings(
         raise EmailConfigError(str(exc)) from exc
 
 
+def load_pickup_directory_email_settings(
+    config: Any,
+    section: str = "email",
+) -> PickupDirectoryEmailSettings:
+    """Load pickup-directory email settings from a config-like object."""
+    if not _config_has_section(config, section):
+        raise EmailConfigError(f"Required config section {section} is missing")
+
+    backend = _read_optional_config_string(config, section, "backend")
+    if backend is not None and backend.lower() != "pickup":
+        raise EmailConfigError(
+            "load_pickup_directory_email_settings only supports "
+            f"the pickup backend; got {backend!r}"
+        )
+
+    try:
+        return PickupDirectoryEmailSettings(
+            pickup_dir=_read_required_config_string(config, section, "pickup_dir"),
+            sender=_read_required_config_string(config, section, "sender"),
+        )
+    except EmailConfigError:
+        raise
+    except ValueError as exc:
+        raise EmailConfigError(str(exc)) from exc
+
+
 def _require_non_blank(value: str, field_name: str, *, strip: bool = True) -> str:
     """Return a validated non-blank string, optionally stripped."""
     if not isinstance(value, str) or not value.strip():
@@ -612,6 +638,7 @@ __all__ = [
     "GraphEmailSender",
     "GraphEmailSettings",
     "load_graph_email_settings",
+    "load_pickup_directory_email_settings",
     "PickupDirectoryEmailSender",
     "PickupDirectoryEmailSettings",
     "UrlLibHttpResponse",

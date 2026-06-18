@@ -1,15 +1,19 @@
+import configparser
 from email import policy
 from email.parser import BytesParser
 from email.utils import getaddresses
 from io import StringIO
+from pathlib import Path
 
 import pytest
 
 from shamir_app_core import (
     ConsoleEmailSender,
+    EmailConfigError,
     EmailMessage,
     EmailSender,
     EmailSendError,
+    load_pickup_directory_email_settings,
     PickupDirectoryEmailSender,
     PickupDirectoryEmailSettings,
 )
@@ -17,6 +21,12 @@ from shamir_app_core import (
 
 def send_with_sender(sender: EmailSender, message: EmailMessage) -> None:
     sender.send(message)
+
+
+def make_config(values, section="email"):
+    config = configparser.ConfigParser()
+    config[section] = values
+    return config
 
 
 def test_email_message_accepts_required_text_fields():
@@ -155,6 +165,112 @@ def test_pickup_directory_email_sender_writes_one_parseable_eml_file(tmp_path):
     ]
 
 
+def test_load_pickup_directory_email_settings_loads_pickup_dir_and_sender():
+    config = make_config(
+        {
+            "pickup_dir": "sample-pickup",
+            "sender": "sender@example.com",
+        }
+    )
+
+    settings = load_pickup_directory_email_settings(config)
+
+    assert settings == PickupDirectoryEmailSettings(
+        pickup_dir=Path("sample-pickup"),
+        sender="sender@example.com",
+    )
+
+
+def test_load_pickup_directory_email_settings_supports_pickup_backend():
+    config = make_config(
+        {
+            "backend": "pickup",
+            "pickup_dir": "sample-pickup",
+            "sender": "sender@example.com",
+        }
+    )
+
+    settings = load_pickup_directory_email_settings(config)
+
+    assert isinstance(settings, PickupDirectoryEmailSettings)
+
+
+def test_load_pickup_directory_email_settings_allows_missing_backend():
+    config = make_config(
+        {
+            "pickup_dir": "sample-pickup",
+            "sender": "sender@example.com",
+        }
+    )
+
+    settings = load_pickup_directory_email_settings(config)
+
+    assert settings.sender == "sender@example.com"
+
+
+def test_load_pickup_directory_email_settings_rejects_graph_backend():
+    config = make_config(
+        {
+            "backend": "graph",
+            "pickup_dir": "sample-pickup",
+            "sender": "sender@example.com",
+        }
+    )
+
+    with pytest.raises(EmailConfigError, match="only supports .* pickup backend"):
+        load_pickup_directory_email_settings(config)
+
+
+def test_load_pickup_directory_email_settings_rejects_unsupported_backend():
+    config = make_config(
+        {
+            "backend": "smtp_relay",
+            "pickup_dir": "sample-pickup",
+            "sender": "sender@example.com",
+        }
+    )
+
+    with pytest.raises(EmailConfigError, match="only supports .* pickup backend"):
+        load_pickup_directory_email_settings(config)
+
+
+def test_load_pickup_directory_email_settings_missing_section_raises_config_error():
+    config = configparser.ConfigParser()
+
+    with pytest.raises(EmailConfigError, match="Required config section email is missing"):
+        load_pickup_directory_email_settings(config)
+
+
+@pytest.mark.parametrize("option", ["pickup_dir", "sender"])
+def test_load_pickup_directory_email_settings_missing_required_value_raises_config_error(
+    option,
+):
+    values = {
+        "pickup_dir": "sample-pickup",
+        "sender": "sender@example.com",
+    }
+    del values[option]
+    config = make_config(values)
+
+    with pytest.raises(EmailConfigError, match=option):
+        load_pickup_directory_email_settings(config)
+
+
+@pytest.mark.parametrize("option", ["pickup_dir", "sender"])
+def test_load_pickup_directory_email_settings_blank_required_value_raises_config_error(
+    option,
+):
+    values = {
+        "pickup_dir": "sample-pickup",
+        "sender": "sender@example.com",
+    }
+    values[option] = "   "
+    config = make_config(values)
+
+    with pytest.raises(EmailConfigError, match=option):
+        load_pickup_directory_email_settings(config)
+
+
 def test_pickup_directory_email_sender_handles_multiple_recipients(tmp_path):
     sender = PickupDirectoryEmailSender(
         PickupDirectoryEmailSettings(
@@ -287,5 +403,9 @@ def test_email_api_is_available_from_top_level_package():
     assert EmailMessage.__name__ == "EmailMessage"
     assert EmailSender.__name__ == "EmailSender"
     assert ConsoleEmailSender.__name__ == "ConsoleEmailSender"
+    assert (
+        load_pickup_directory_email_settings.__name__
+        == "load_pickup_directory_email_settings"
+    )
     assert PickupDirectoryEmailSettings.__name__ == "PickupDirectoryEmailSettings"
     assert PickupDirectoryEmailSender.__name__ == "PickupDirectoryEmailSender"
