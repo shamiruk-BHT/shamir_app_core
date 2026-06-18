@@ -1,13 +1,20 @@
 """Generic text email messages and sender foundations."""
 
+from datetime import datetime, timezone
+from email.generator import BytesGenerator
+from email.message import EmailMessage as StdlibEmailMessage
+from email import policy
+from io import BytesIO
 import json as json_module
 import os
+from pathlib import Path
 import urllib.error
 import urllib.request
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TextIO
 from urllib.parse import quote, urlencode
+from uuid import uuid4
 
 
 @dataclass(frozen=True)
@@ -61,6 +68,72 @@ class EmailSendError(RuntimeError):
 
 class EmailConfigError(ValueError):
     """Raised when email settings cannot be loaded from configuration."""
+
+
+@dataclass(frozen=True)
+class PickupDirectoryEmailSettings:
+    """Settings for writing MIME messages into an SMTP pickup directory."""
+
+    pickup_dir: Path | str
+    sender: str
+    filename_prefix: str = "email"
+    file_extension: str = ".eml"
+
+    def __post_init__(self) -> None:
+        """Normalize path and text settings."""
+        object.__setattr__(self, "pickup_dir", Path(self.pickup_dir))
+        object.__setattr__(self, "sender", _require_non_blank(self.sender, "sender"))
+        object.__setattr__(
+            self,
+            "filename_prefix",
+            _require_non_blank(self.filename_prefix, "filename_prefix"),
+        )
+        object.__setattr__(
+            self,
+            "file_extension",
+            _require_non_blank(self.file_extension, "file_extension"),
+        )
+
+
+class PickupDirectoryEmailSender:
+    """Write MIME .eml files directly into an SMTP pickup directory."""
+
+    def __init__(self, settings: PickupDirectoryEmailSettings) -> None:
+        """Create a pickup-directory sender with explicit settings."""
+        self.settings = settings
+
+    def send(self, message: EmailMessage) -> None:
+        """Write the message as a unique binary MIME file in the pickup directory."""
+        pickup_dir = self.settings.pickup_dir
+        if not pickup_dir.is_dir():
+            raise EmailSendError(f"Pickup directory does not exist: {pickup_dir}")
+
+        message_bytes = self._build_message_bytes(message)
+        path = pickup_dir / self._make_filename()
+        try:
+            with path.open("xb") as handle:
+                handle.write(message_bytes)
+        except OSError as exc:
+            raise EmailSendError(f"Could not write pickup email file: {path}") from exc
+
+    def _make_filename(self) -> str:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        return (
+            f"{self.settings.filename_prefix}-{timestamp}-{uuid4().hex}"
+            f"{self.settings.file_extension}"
+        )
+
+    def _build_message_bytes(self, message: EmailMessage) -> bytes:
+        mime_message = StdlibEmailMessage(policy=policy.SMTP)
+        mime_message["From"] = self.settings.sender
+        mime_message["To"] = ", ".join(message.to)
+        mime_message["Subject"] = message.subject
+        mime_message.set_content(message.body_text)
+
+        output = BytesIO()
+        generator = BytesGenerator(output, policy=policy.SMTP)
+        generator.flatten(mime_message)
+        return output.getvalue()
 
 
 @dataclass(frozen=True)
@@ -539,6 +612,8 @@ __all__ = [
     "GraphEmailSender",
     "GraphEmailSettings",
     "load_graph_email_settings",
+    "PickupDirectoryEmailSender",
+    "PickupDirectoryEmailSettings",
     "UrlLibHttpResponse",
     "UrlLibHttpTransport",
 ]

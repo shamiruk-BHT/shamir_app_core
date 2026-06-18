@@ -18,6 +18,8 @@ from shamir_app_core.email import (
     GraphEmailSender,
     GraphEmailSettings,
     load_graph_email_settings,
+    PickupDirectoryEmailSender,
+    PickupDirectoryEmailSettings,
     UrlLibHttpResponse,
     UrlLibHttpTransport,
 )
@@ -42,6 +44,8 @@ __all__ = [
     "JsonlEventWriter",
     "LegacyApplicationContext",
     "load_graph_email_settings",
+    "PickupDirectoryEmailSender",
+    "PickupDirectoryEmailSettings",
     "print_banner",
     "RuntimeError",
     "UrlLibHttpResponse",
