@@ -2,7 +2,11 @@ from io import StringIO
 
 import pytest
 
-from shamir_app_core import ConsoleEmailSender, EmailMessage
+from shamir_app_core import ConsoleEmailSender, EmailMessage, EmailSender
+
+
+def send_with_sender(sender: EmailSender, message: EmailMessage) -> None:
+    sender.send(message)
 
 
 def test_email_message_accepts_required_text_fields():
@@ -100,6 +104,21 @@ def test_console_email_sender_writes_readable_preview():
     )
 
 
+def test_email_sender_protocol_accepts_console_email_sender_structurally():
+    stream = StringIO()
+    sender = ConsoleEmailSender(stream)
+    message = EmailMessage(
+        to=["user@example.com"],
+        subject="Status update",
+        body_text="The job completed.",
+    )
+
+    send_with_sender(sender, message)
+
+    assert "Subject: Status update" in stream.getvalue()
+
+
 def test_email_api_is_available_from_top_level_package():
     assert EmailMessage.__name__ == "EmailMessage"
+    assert EmailSender.__name__ == "EmailSender"
     assert ConsoleEmailSender.__name__ == "ConsoleEmailSender"

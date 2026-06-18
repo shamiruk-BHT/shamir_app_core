@@ -8,6 +8,7 @@ import pytest
 from shamir_app_core import (
     EmailConfigError,
     EmailMessage,
+    EmailSender,
     EmailSendError,
     GraphEmailSender,
     GraphEmailSettings,
@@ -15,6 +16,10 @@ from shamir_app_core import (
     UrlLibHttpResponse,
     UrlLibHttpTransport,
 )
+
+
+def send_with_sender(sender: EmailSender, message: EmailMessage) -> None:
+    sender.send(message)
 
 
 @dataclass
@@ -400,6 +405,20 @@ def test_graph_email_sender_includes_save_to_sent_items_false_in_payload():
     sender.send(make_message())
 
     assert transport.requests[1]["json"]["saveToSentItems"] is False
+
+
+def test_email_sender_protocol_accepts_graph_email_sender_structurally():
+    transport = FakeTransport(
+        [
+            FakeResponse(200, {"access_token": "token-value"}),
+            FakeResponse(202),
+        ]
+    )
+    sender = GraphEmailSender(make_settings(), transport)
+
+    send_with_sender(sender, make_message())
+
+    assert len(transport.requests) == 2
 
 
 def test_graph_email_api_is_available_from_top_level_package():

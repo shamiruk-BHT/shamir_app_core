@@ -29,6 +29,13 @@ class EmailMessage:
         object.__setattr__(self, "body_text", clean_body_text)
 
 
+class EmailSender(Protocol):
+    """Backend-agnostic protocol for sending validated email messages."""
+
+    def send(self, message: EmailMessage) -> None:
+        """Send the provided email message."""
+
+
 class ConsoleEmailSender:
     """Write a readable email preview to a text stream."""
 
@@ -527,6 +534,7 @@ __all__ = [
     "ConsoleEmailSender",
     "EmailConfigError",
     "EmailMessage",
+    "EmailSender",
     "EmailSendError",
     "GraphEmailSender",
     "GraphEmailSettings",
